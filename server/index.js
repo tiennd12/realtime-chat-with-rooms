@@ -62,53 +62,51 @@ io.on("connection", (socket) => {
     socket.to(room).emit("chatroom_users", chatRoomUsers);
     socket.emit("chatroom_users", chatRoomUsers);
 
-    socket.on("send_message", (data) => {
-      const { message, username, room, __createdtime__ } = data;
-      io.in(room).emit("receive_message", data); // Send to all users in room, including sender
-      harperSaveMessage(message, username, room, __createdtime__) // Save message in db
-        .then((response) => console.log(response))
-        .catch((error) => console.log(error));
-    });
-
     harperGetMessages(room)
       .then((last100Messages) => {
         // console.log("Last 100 msg", last100Messages);
         socket.emit("last_100_messages", last100Messages);
       })
       .catch((err) => console.log(err));
+  });
 
-    socket.on("leave_room", (data) => {
-      const { username, room } = data;
-      socket.leave(room);
-      const __createdtime__ = Date.now();
-      // Remove user from memory
+  socket.on("send_message", (data) => {
+    const { message, username, room, __createdtime__ } = data;
+    io.in(room).emit("receive_message", data); // Send to all users in room, including sender
+    harperSaveMessage(message, username, room, __createdtime__) // Save message in db
+      .then((response) => console.log(response))
+      .catch((error) => console.log(error));
+  });
+
+  socket.on("leave_room", (data) => {
+    const { username, room } = data;
+    socket.leave(room);
+    const __createdtime__ = Date.now();
+    // Remove user from memory
+    allUsers = leaveRoom(socket.id, allUsers);
+    socket.to(room).emit("chatroom_users", allUsers);
+    socket.to(room).emit("receive_message", {
+      username: CHAT_BOT,
+      message: `${username} has left the chat`,
+      __createdtime__,
+    });
+    console.log(`${username} has left the chat`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected from the chat");
+    const user = allUsers.find((user) => user.id == socket.id);
+    if (user?.username) {
       allUsers = leaveRoom(socket.id, allUsers);
-      socket.to(room).emit("chatroom_users", allUsers);
-      socket.to(room).emit("receive_message", {
+      socket.to(chatRoom).emit("chatroom_users", allUsers);
+      socket.to(chatRoom).emit("receive_message", {
+        message: `${username} has disconnected from the chat`,
         username: CHAT_BOT,
-        message: `${username} has left the chat`,
-        __createdtime__,
       });
-      console.log(data);
-      console.log(`${username} has left the chat`);
-    });
-
-    socket.on("disconnect", () => {
-      console.log("User disconnected from the chat");
-      const user = allUsers.find((user) => user.id == socket.id);
-      if (user?.username) {
-        allUsers = leaveRoom(socket.id, allUsers);
-        socket.to(chatRoom).emit("chatroom_users", allUsers);
-        socket.to(chatRoom).emit("receive_message", {
-          message: `${username} has disconnected from the chat`,
-          username: CHAT_BOT
-        });
-      }
-    });
+    }
   });
 });
 
 server.listen(PORT, () => {
   console.log(`server is running on port: ${PORT}`);
 });
-
